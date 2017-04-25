@@ -83,13 +83,13 @@ impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		use self::Error::*;
 		let message = match *self {
-			OutOfGas => "Out of gas",
-			BadJumpDestination { .. } => "Bad jump destination",
-			BadInstruction { .. } => "Bad instruction",
-			StackUnderflow { .. } => "Stack underflow",
-			OutOfStack { .. } => "Out of stack",
-			BuiltIn { .. } => "Built-in failed",
-			Internal(ref msg) => msg,
+			OutOfGas => "Out of gas".into(),
+			BadJumpDestination { destination } => format!("Bad jump destination {:x}", destination),
+			BadInstruction { instruction } => format!("Bad instruction {:x}",  instruction),
+			StackUnderflow { instruction, wanted, on_stack } => format!("Stack underflow {} {}/{}", instruction, wanted, on_stack),
+			OutOfStack { instruction, wanted, limit } => format!("Out of stack {} {}/{}", instruction, wanted, limit),
+			BuiltIn(name) => format!("Built-in failed: {}", name),
+			Internal(ref msg) => msg.clone(),
 		};
 		message.fmt(f)
 	}

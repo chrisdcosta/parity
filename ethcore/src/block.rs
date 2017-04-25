@@ -21,7 +21,7 @@ use std::sync::Arc;
 use std::collections::HashSet;
 
 use rlp::{UntrustedRlp, RlpStream, Encodable, Decodable, DecoderError};
-use util::{Bytes, Address, Uint, Hashable, U256, H256, ordered_trie_root, SHA3_NULL_RLP};
+use util::{Bytes, BytesRef, Address, Uint, Hashable, U256, H256, ordered_trie_root, SHA3_NULL_RLP};
 use util::error::{Mismatch, OutOfBounds};
 
 use basic_types::{LogBloom, Seal};
@@ -31,12 +31,16 @@ use error::{Error, BlockError, TransactionError};
 use factory::Factories;
 use header::Header;
 use receipt::Receipt;
-use state::State;
+use state::{State, Substate};
 use state_db::StateDB;
 use trace::FlatTrace;
-use transaction::{UnverifiedTransaction, SignedTransaction};
+use transaction::{UnverifiedTransaction, SignedTransaction, SYSTEM_ADDRESS};
 use verification::PreverifiedBlock;
 use views::BlockView;
+use executive::Executive;
+use types::executed::CallType;
+use action_params::{ActionParams, ActionValue};
+use trace::{NoopTracer, NoopVMTracer};
 
 /// A block, encoded as it is on the block chain.
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -265,7 +269,7 @@ impl<'x> OpenBlock<'x> {
 		let mut r = OpenBlock {
 			block: ExecutedBlock::new(state, tracing),
 			engine: engine,
-			last_hashes: last_hashes,
+			last_hashes: last_hashes.clone(),
 		};
 
 		r.block.header.set_parent_hash(parent.hash());
@@ -278,8 +282,53 @@ impl<'x> OpenBlock<'x> {
 		let gas_floor_target = cmp::max(gas_range_target.0, engine.params().min_gas_limit);
 		let gas_ceil_target = cmp::max(gas_range_target.1, gas_floor_target);
 		engine.populate_from_parent(&mut r.block.header, parent, gas_floor_target, gas_ceil_target);
+		Self::push_last_hash(&mut r.block, last_hashes, engine, &parent.hash())?;
 		engine.on_new_block(&mut r.block);
 		Ok(r)
+	}
+
+
+	fn push_last_hash(block: &mut ExecutedBlock, last_hashes: Arc<LastHashes>, engine: &Engine, hash: &H256) -> Result<(), Error> {
+		if block.fields().header.number() == engine.params().eip210_transition {
+			let state = block.fields_mut().state;
+			state.init_code(&engine.params().eip210_contract_address, engine.params().eip210_contract_code.clone())?;
+		}
+		if block.fields().header.number() >= engine.params().eip210_transition {
+			let env_info = {
+				let header = block.fields().header;
+				EnvInfo {
+					number: header.number(),
+					author: header.author().clone(),
+					timestamp: header.timestamp(),
+					difficulty: header.difficulty().clone(),
+					last_hashes: last_hashes,
+					gas_used: U256::zero(),
+					gas_limit: engine.params().eip210_contract_gas,
+				}
+			};
+			let mut state = block.fields_mut().state;
+			let contract_address = engine.params().eip210_contract_address;
+			let params = ActionParams {
+				code_address: contract_address.clone(),
+				address: contract_address.clone(),
+				sender: SYSTEM_ADDRESS.clone(),
+				origin: SYSTEM_ADDRESS.clone(),
+				gas: engine.params().eip210_contract_gas,
+				gas_price: 0.into(),
+				value: ActionValue::Transfer(0.into()),
+				code: state.code(&contract_address)?,
+				code_hash: state.code_hash(&contract_address)?,
+				data: Some(hash.to_vec()),
+				call_type: CallType::Call,
+			};
+			let mut ex = Executive::new(&mut state, &env_info, engine);
+			let mut substate = Substate::new();
+			let mut output = [];
+			if let Err(e) = ex.call(params, &mut substate, BytesRef::Fixed(&mut output), &mut NoopTracer, &mut NoopVMTracer) {
+				warn!("Encountered error on updating last hashes: {}", e);
+			}
+		}
+		Ok(())
 	}
 
 	/// Alter the author for the block.

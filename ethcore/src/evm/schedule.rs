@@ -106,6 +106,8 @@ pub struct Schedule {
 	pub kill_empty: bool,
 	/// Contract address generation scheme
 	pub create_address: CreateContractAddress,
+	/// Blockhash instruction gas cost.
+	pub blockhash_gas: usize,
 }
 
 impl Schedule {
@@ -165,6 +167,7 @@ impl Schedule {
 			no_empty: no_empty,
 			kill_empty: kill_empty,
 			create_address: if have_metropolis_instructions { CreateContractAddress::FromCodeHash } else { CreateContractAddress::FromSenderAndNonce },
+			blockhash_gas: if have_metropolis_instructions { 350 } else { 20 },
 		}
 	}
 
@@ -218,6 +221,7 @@ impl Schedule {
 			no_empty: false,
 			kill_empty: false,
 			create_address: CreateContractAddress::FromSenderAndNonce,
+			blockhash_gas: 20,
 		}
 	}
 }
