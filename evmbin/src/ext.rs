@@ -64,7 +64,7 @@ impl Ext for FakeExt {
 		unimplemented!();
 	}
 
-	fn blockhash(&self, _number: &U256) -> H256 {
+	fn blockhash(&mut self, _number: &U256) -> H256 {
 		unimplemented!();
 	}
 
