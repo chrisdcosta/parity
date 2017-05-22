@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use util::{U256, Uint};
+use evm::ReturnData;
 
 pub trait Memory {
 	/// Retrieve current size of the memory
@@ -36,6 +37,8 @@ pub trait Memory {
 	/// Retrieve writeable part of memory
 	fn writeable_slice(&mut self, offset: U256, size: U256) -> &mut[u8];
 	fn dump(&self);
+	/// Convert memory into return data.
+	fn into_return_data(self, offset: usize, size: usize) -> ReturnData;
 }
 
 /// Checks whether offset and size is valid memory range
@@ -111,6 +114,10 @@ impl Memory for Vec<u8> {
 		if size > self.len() {
 			Memory::resize(self, size)
 		}
+	}
+
+	fn into_return_data(self, offset: usize, size: usize) -> ReturnData {
+		ReturnData::new(self, offset, size)
 	}
 }
 

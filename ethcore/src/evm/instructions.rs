@@ -171,6 +171,8 @@ lazy_static! {
 		arr[ADDMOD as usize] =			InstructionInfo::new("ADDMOD",			0, 3, 1, false, GasPriceTier::Mid);
 		arr[MULMOD as usize] =			InstructionInfo::new("MULMOD",			0, 3, 1, false, GasPriceTier::Mid);
 		arr[SIGNEXTEND as usize] =		InstructionInfo::new("SIGNEXTEND",		0, 2, 1, false, GasPriceTier::Low);
+		arr[RETURNDATASIZE as usize] =	InstructionInfo::new("RETURNDATASIZE",	0, 0, 1, false, GasPriceTier::Base);
+		arr[RETURNDATACOPY as usize] =	InstructionInfo::new("RETURNDATACOPY",	0, 3, 0, true, GasPriceTier::VeryLow);
 		arr[SHA3 as usize] =			InstructionInfo::new("SHA3",			0, 2, 1, false, GasPriceTier::Special);
 		arr[ADDRESS as usize] = 		InstructionInfo::new("ADDRESS",			0, 0, 1, false, GasPriceTier::Base);
 		arr[BALANCE as usize] = 		InstructionInfo::new("BALANCE",			0, 1, 1, false, GasPriceTier::Special);
@@ -309,6 +311,11 @@ pub const MULMOD: Instruction = 0x09;
 pub const EXP: Instruction = 0x0a;
 /// extend length of signed integer
 pub const SIGNEXTEND: Instruction = 0x0b;
+
+/// get the size of the return data buffer for the last call
+pub const RETURNDATASIZE: Instruction = 0x0d;
+/// copy return data buffer to memory
+pub const RETURNDATACOPY: Instruction = 0x0e;
 
 /// less-than comparision
 pub const LT: Instruction = 0x10;

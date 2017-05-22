@@ -22,7 +22,7 @@ use engines::Engine;
 use types::executed::CallType;
 use env_info::EnvInfo;
 use error::ExecutionError;
-use evm::{self, Ext, Finalize, CreateContractAddress, FinalizationResult};
+use evm::{self, Ext, Finalize, CreateContractAddress, FinalizationResult, ReturnData};
 use externalities::*;
 use trace::{FlatTrace, Tracer, NoopTracer, ExecutiveTracer, VMTrace, VMTracer, ExecutiveVMTracer, NoopVMTracer};
 use transaction::{Action, SignedTransaction};
@@ -179,7 +179,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 
 		let mut substate = Substate::new();
 
-		let (gas_left, output) = match t.action {
+		let (result, output) = match t.action {
 			Action::Create => {
 				let code_hash = t.data.sha3();
 				let new_address = contract_address(schedule.create_address, &sender, &nonce, &code_hash);
@@ -218,7 +218,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 		};
 
 		// finalize here!
-		Ok(self.finalize(t, substate, gas_left, output, tracer.traces(), vm_tracer.drain())?)
+		Ok(self.finalize(t, substate, result, output, tracer.traces(), vm_tracer.drain())?)
 	}
 
 	fn exec_vm<T, V>(
@@ -264,7 +264,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 		mut output: BytesRef,
 		tracer: &mut T,
 		vm_tracer: &mut V
-	) -> evm::Result<U256> where T: Tracer, V: VMTracer {
+	) -> evm::Result<(U256, ReturnData)> where T: Tracer, V: VMTracer {
 		// backup used in case of running out of gas
 		self.state.checkpoint();
 
@@ -314,7 +314,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 						);
 					}
 
-					Ok(params.gas - cost)
+					Ok((params.gas - cost, ReturnData::empty()))
 				}
 			} else {
 				// just drain the whole gas
@@ -361,13 +361,13 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 
 				self.enact_result(&res, substate, unconfirmed_substate);
 				trace!(target: "executive", "enacted: substate={:?}\n", substate);
-				res.map(|r| r.gas_left)
+				res.map(|r| (r.gas_left, r.return_data))
 			} else {
 				// otherwise it's just a basic transaction, only do tracing, if necessary.
 				self.state.discard_checkpoint();
 
 				tracer.trace_call(trace_info, U256::zero(), trace_output, vec![]);
-				Ok(params.gas)
+				Ok((params.gas, ReturnData::empty()))
 			}
 		}
 	}
@@ -381,7 +381,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 		substate: &mut Substate,
 		tracer: &mut T,
 		vm_tracer: &mut V,
-	) -> evm::Result<U256> where T: Tracer, V: VMTracer {
+	) -> evm::Result<(U256, ReturnData)> where T: Tracer, V: VMTracer {
 
 		let schedule = self.engine.schedule(self.info.number);
 		if schedule.create_address != CreateContractAddress::FromSenderAndNonce && self.state.exists(&params.address)? {
@@ -430,7 +430,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 		};
 
 		self.enact_result(&res, substate, unconfirmed_substate);
-		res.map(|r| r.gas_left)
+		res.map(|r| (r.gas_left, r.return_data))
 	}
 
 	/// Finalizes the transaction (does refunds and suicides).
@@ -438,7 +438,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 		&mut self,
 		t: &SignedTransaction,
 		mut substate: Substate,
-		result: evm::Result<U256>,
+		result: evm::Result<(U256, ReturnData)>,
 		output: Bytes,
 		trace: Vec<FlatTrace>,
 		vm_trace: Option<VMTrace>
@@ -452,7 +452,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 		let refunds_bound = sstore_refunds + suicide_refunds;
 
 		// real ammount to refund
-		let gas_left_prerefund = match result { Ok(x) => x, _ => 0.into() };
+		let gas_left_prerefund = match result { Ok((x, _)) => x, _ => 0.into() };
 		let refunded = cmp::min(refunds_bound, (t.gas - gas_left_prerefund) >> 1);
 		let gas_left = gas_left_prerefund + refunded;
 

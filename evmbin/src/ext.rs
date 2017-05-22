@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use util::{U256, H256, Address, Bytes, trie};
 use ethcore::client::EnvInfo;
-use ethcore::evm::{self, Ext, ContractCreateResult, MessageCallResult, Schedule, CallType, CreateContractAddress};
+use ethcore::evm::{self, Ext, ContractCreateResult, MessageCallResult, Schedule, CallType, CreateContractAddress, ReturnData};
 
 pub struct FakeExt {
 	schedule: Schedule,
@@ -96,7 +96,7 @@ impl Ext for FakeExt {
 		unimplemented!();
 	}
 
-	fn ret(self, gas: &U256, _data: &[u8]) -> evm::Result<U256> {
+	fn ret(self, gas: &U256, _data: &ReturnData) -> evm::Result<U256> {
 		Ok(*gas)
 	}
 
